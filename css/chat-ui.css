@@ -1,0 +1,392 @@
+/* ============================
+   1. 基础框架 (Header & List)
+   ============================ */
+
+/* 顶部导航 */
+.chat-header {
+    height: 50px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 10;
+    position: relative; /* 保证层级 */
+}
+
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: #ddd; margin-right: 10px; }
+.chat-info h3 { font-size: 16px; font-weight: 600; margin: 0; }
+.chat-info span { font-size: 12px; color: #888; }
+
+/* 消息列表容器 */
+.message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    /* 背景色由 JS 控制 (图片或纯色) */
+}
+
+/* 消息行布局 */
+.msg-row { 
+    display: flex; 
+    width: 100%; 
+    align-items: flex-end; 
+    gap: 8px;
+    position: relative; /* 为多选框定位 */
+}
+.msg-row.me { justify-content: flex-end; }
+.msg-row.ai { justify-content: flex-start; }
+
+/* ============================
+   2. 底部输入区域 (Input Area)
+   ============================ */
+
+.input-area {
+    padding: 10px 15px 25px 15px; /* 底部留白适应手势条 */
+    background-color: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    box-sizing: border-box;
+    width: 100%;
+    position: relative; /* 为加号菜单做定位基准 */
+}
+
+/* 左侧加号图标 */
+.input-area > i {
+    flex-shrink: 0;
+    font-size: 28px;
+    color: #888;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.input-area > i.active {
+    transform: rotate(45deg);
+    color: #333;
+}
+
+/* 输入框本体 */
+.input-box {
+    flex: 1;
+    min-width: 0; /* 防止撑爆 Flex 容器 */
+    padding: 10px 16px;
+    border-radius: 22px;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: #fff;
+    outline: none;
+    font-size: 15px;
+    color: #333;
+    height: 42px;
+}
+
+/* 右侧按钮组 */
+.btn-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0; /* 关键：禁止被挤压 */
+}
+
+/* 通用圆形按钮样式 */
+.send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.1s, opacity 0.2s;
+    font-size: 18px;
+    color: white !important; /* 强制图标白色 */
+}
+
+.send-btn:active {
+    transform: scale(0.92);
+}
+
+.send-btn:disabled {
+    background-color: #ccc !important;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* 按钮 1：AI生成 (黑色) - 对应 InputBar.js 里的第一个按钮 */
+.btn-group .send-btn:first-child {
+    background-color: #333;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* 按钮 2：发送 (蓝色) - 对应 InputBar.js 里的第二个按钮 */
+.btn-group .send-btn:last-child {
+    background-color: #007aff;
+    box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+}
+
+/* ============================
+   3. 新功能组件样式
+   ============================ */
+
+/* --- 左侧加号弹出菜单 --- */
+.plus-menu {
+    position: absolute;
+    bottom: 80px; /* 输入框高度 + padding */
+    left: 15px;
+    width: 260px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-radius: 20px;
+    padding: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    z-index: 50;
+    animation: popUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border: 1px solid rgba(255,255,255,0.5);
+}
+
+@keyframes popUp { 
+    from { opacity: 0; transform: scale(0.9) translateY(10px); } 
+    to { opacity: 1; transform: scale(1) translateY(0); } 
+}
+
+.plus-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 5px 0;
+    border-radius: 12px;
+    transition: background 0.2s;
+}
+
+.plus-item:active {
+    background: rgba(0,0,0,0.05);
+}
+
+.plus-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: #f2f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #555;
+}
+
+.plus-label {
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+}
+
+/* --- 长按/右键菜单 (Context Menu) --- */
+.context-menu-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+    /* 透明遮罩，点击关闭 */
+}
+
+.context-menu {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    min-width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transform-origin: top left;
+    animation: menuScale 0.15s ease-out;
+}
+
+@keyframes menuScale { 
+    from { opacity: 0; transform: scale(0.95); } 
+    to { opacity: 1; transform: scale(1); } 
+}
+
+.menu-item {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.menu-item:active {
+    background: rgba(0,0,0,0.08);
+}
+
+.menu-item.danger {
+    color: #ff3b30;
+}
+
+.menu-item i {
+    font-size: 18px;
+    opacity: 0.7;
+}
+
+/* --- OS 心声弹窗 --- */
+.os-modal {
+    position: absolute;
+    top: 60px; 
+    right: 20px;
+    width: 280px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    border-radius: 24px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideInDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slideInDown { 
+    from { opacity: 0; transform: translateY(-20px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+.os-header {
+    padding: 15px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-size: 14px;
+    font-weight: 600;
+    color: #555;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.3);
+}
+
+.os-content {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #444;
+    font-family: sans-serif;
+    white-space: pre-wrap;
+}
+
+.os-placeholder {
+    color: #999;
+    font-style: italic;
+    text-align: center;
+    margin-top: 50px;
+}
+
+.thinking-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: #333;
+    border-radius: 50%;
+    margin-right: 4px;
+    animation: bounce 1s infinite;
+}
+
+@keyframes bounce { 
+    0%, 100% { transform: translateY(0); } 
+    50% { transform: translateY(-4px); } 
+}
+
+/* --- 多选模式样式 --- */
+.msg-row.selecting {
+    opacity: 0.5;
+    pointer-events: none; /* 未选中时变淡 */
+}
+
+.msg-row.selected {
+    opacity: 1;
+    background: rgba(0,122,255,0.08); /* 选中时的背景高亮 */
+    border-radius: 16px;
+    padding: 5px;
+    margin: -5px 0; /* 抵消 padding 带来的位移 */
+}
+
+.checkbox-overlay {
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+    color: #007aff;
+    font-size: 24px;
+    animation: fadeIn 0.2s;
+}
+
+/* ============================
+   4. 聊天室绝对定位布局系统 (Chat Layout)
+   ============================ */
+
+/* 主容器：作为定位基准 */
+.chat-room-container {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* 裁剪溢出，防止撑大 */
+    display: flex;
+    flex-direction: column;
+    /* 背景图通过内联 style 动态设置，但布局属性在这里 */
+}
+
+/* 顶部栏定位 */
+.chat-abs-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    z-index: 10;
+}
+
+/* 消息列表定位 (核心修复：锁死上下边界) */
+.chat-abs-list {
+    position: absolute;
+    top: 50px;       /* 避开 Header */
+    bottom: 80px;    /* 避开 InputBar */
+    left: 0;
+    right: 0;
+    overflow-y: auto; /* 内部滚动 */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 底部输入框定位 */
+.chat-abs-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+}
