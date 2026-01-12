@@ -41,27 +41,22 @@ export default {
                     <span>接口</span>
                 </div>
 
-                <div class="app-item" @click="$emit('open-app', 'theme')">
+                <!-- 修改这里：从 外观(theme) 改为 设置(settings) -->
+                <div class="app-item" @click="$emit('open-app', 'settings')">
                     <div class="app-icon" style="background: #e0e0e0; color: #333;">
-                        <i class="ri-palette-line"></i>
+                        <i class="ri-settings-4-line"></i>
                     </div>
-                    <span>外观</span>
+                    <span>设置</span>
                 </div>
             </div>
 
-            <!-- 3. 底部：图文卡片 (样式已回调为玻璃风格) -->
-            <!-- 注意：这里必须加上 glass-panel 类名 -->
+            <!-- 3. 底部：图文卡片 -->
             <div class="glass-panel quote-widget" @click="switchCard">
-                <!-- 左侧图片 -->
                 <div class="widget-cover" :style="{ backgroundImage: 'url(' + currentCard.img + ')' }"></div>
-                
-                <!-- 中间文字 -->
                 <div class="widget-content">
                     <div class="widget-tag"># {{ currentCard.tag }}</div>
                     <div class="widget-text">{{ currentCard.text }}</div>
                 </div>
-                
-                <!-- 右侧箭头 -->
                 <div class="widget-action">
                     <i class="ri-arrow-right-s-line"></i>
                 </div>
@@ -77,7 +72,6 @@ export default {
         </div>
     `,
     setup() {
-        // --- 日期与问候逻辑 ---
         const now = new Date();
         const date = `${now.getMonth() + 1}月${now.getDate()}日`;
         const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
@@ -89,7 +83,6 @@ export default {
         else if (hour < 18) greeting = '下午好';
         else greeting = '晚上好';
 
-        // --- 卡片数据 (你可以自己换图换字) ---
         const cardData = [
             {
                 tag: 'Daily',

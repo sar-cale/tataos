@@ -2,7 +2,7 @@ import { createApp, ref, reactive, watch, computed } from 'vue';
 import StatusBar from './components/StatusBar.js';
 import Desktop from './components/Desktop.js';
 import ChatApp from './components/ChatApp.js';
-import ThemeApp from './components/ThemeApp.js';
+import SettingsApp from './components/SettingsApp.js'; // 改名
 import ApiApp from './components/ApiApp.js';
 import WorldbookApp from './components/WorldbookApp.js';
 
@@ -21,7 +21,7 @@ const PlaceholderApp = {
 };
 
 const App = {
-    components: { StatusBar, Desktop, ChatApp, ThemeApp, ApiApp, WorldbookApp, PlaceholderApp },
+    components: { StatusBar, Desktop, ChatApp, SettingsApp, ApiApp, WorldbookApp, PlaceholderApp },
     template: `
         <!-- 动态注入全局 CSS -->
         <div v-html="globalStyleTag"></div>
@@ -38,7 +38,9 @@ const App = {
                     <desktop v-if="currentApp === null" @open-app="openApp"></desktop>
                     
                     <chat-app v-else-if="currentApp === 'chat'" @close="goHome"></chat-app>
-                    <theme-app v-else-if="currentApp === 'theme'" :settings="globalSettings" @close="goHome"></theme-app>
+                    <!-- 修改路由判断 -->
+                    <settings-app v-else-if="currentApp === 'settings'" :settings="globalSettings" @close="goHome"></settings-app>
+                    
                     <api-app v-else-if="currentApp === 'api'" @close="goHome"></api-app>
                     <worldbook-app v-else-if="currentApp === 'worldbook'" @close="goHome"></worldbook-app>
                     <placeholder-app v-else :title="currentApp" @close="goHome"></placeholder-app>
@@ -49,22 +51,19 @@ const App = {
     setup() {
         const currentApp = ref(null);
         
-        // 读取本地存储的设置
         const savedSettings = JSON.parse(localStorage.getItem('ai_phone_global_settings') || '{}');
 
         const globalSettings = reactive({
             isFullscreen: savedSettings.isFullscreen || false,
-            showStatusBar: savedSettings.showStatusBar !== false, // 默认 true
+            showStatusBar: savedSettings.showStatusBar !== false, 
             enableCustomCss: savedSettings.enableCustomCss || false,
             globalCss: savedSettings.globalCss || ''
         });
 
-        // 监听变化，自动保存到本地
         watch(globalSettings, (newVal) => {
             localStorage.setItem('ai_phone_global_settings', JSON.stringify(newVal));
         }, { deep: true });
 
-        // 生成 Style 标签
         const globalStyleTag = computed(() => {
             if (globalSettings.enableCustomCss && globalSettings.globalCss) {
                 return `<style>${globalSettings.globalCss}</style>`;

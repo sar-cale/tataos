@@ -1,4 +1,4 @@
-import { ref, onMounted, nextTick, reactive } from 'vue';
+import { ref, onMounted, nextTick, reactive, watch, computed } from 'vue';
 import ChatHeader from './ChatHeader.js';
 import MessageList from './MessageList.js';
 import InputBar from './InputBar.js';
@@ -17,16 +17,14 @@ export default {
             @clear-history="handleClearHistory"
         ></chat-settings>
 
-        <!-- 布局容器：使用 class 控制布局，style 只控制动态背景 -->
         <div v-else class="app-window chat-room-container" :style="containerStyle" @click="closePopups">
             
-            <!-- 1. 顶部栏 (Class定位) -->
             <div class="chat-abs-header">
                 <chat-header 
                     :name="sessionData.name" 
                     :status="statusText" 
                     @back="$emit('back')"
-                    @update-status="handleStatusUpdate"
+                    @edit-status="openStatusModal"
                 >
                     <template #right>
                         <i class="ri-eye-line" style="font-size: 24px; cursor: pointer; color: #333; margin-right: 15px;" @click.stop="toggleOs"></i>
@@ -35,23 +33,7 @@ export default {
                 </chat-header>
             </div>
 
-            <!-- 2. OS 弹窗 (保持原有类名定位) -->
-            <div class="os-modal" v-if="showOs" @click.stop>
-                <div class="os-header">
-                    <span><i class="ri-brain-line"></i> 实时心声</span>
-                    <i class="ri-close-line" @click="showOs = false" style="cursor:pointer"></i>
-                </div>
-                <div class="os-content">
-                    <div v-if="currentOs" style="white-space: pre-wrap;">{{ currentOs }}</div>
-                    <div v-else-if="isGenerating" style="text-align:center; padding-top:20px;">
-                        <span class="thinking-dot"></span> 思考中...
-                    </div>
-                    <div v-else class="os-placeholder">等待对方回复...</div>
-                </div>
-            </div>
-
-            <!-- 3. 消息列表 (Class定位) -->
-            <div class="chat-abs-list">
+            <div class="chat-abs-list" ref="scrollRef">
                 <message-list 
                     :messages="sessionData.messages" 
                     :user-avatar="sessionData.settings.userAvatar"
@@ -63,7 +45,6 @@ export default {
                 ></message-list>
             </div>
             
-            <!-- 4. 底部输入框 (Class定位) -->
             <div class="chat-abs-footer">
                 <input-bar 
                     ref="inputBarRef"
@@ -74,12 +55,50 @@ export default {
                 ></input-bar>
             </div>
 
-            <!-- 弹窗遮罩 -->
+            <!-- 弹窗区域 -->
+            <div v-if="showStatusModal" class="center-modal-overlay" @click="showStatusModal = false" style="z-index: 500;">
+                <div class="center-modal-box" @click.stop>
+                    <h3 style="text-align: center; font-size: 16px;">修改状态</h3>
+                    <input v-model="tempStatusValue" class="glass-input" style="text-align: center;" @keyup.enter="saveStatus">
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button class="api-delete-btn" style="margin:0; flex:1; padding:12px;" @click="showStatusModal = false">取消</button>
+                        <button class="api-save-btn" style="margin:0; flex:1; padding:12px;" @click="saveStatus">确定</button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showEditModal" class="center-modal-overlay" @click="showEditModal = false" style="z-index: 500;">
+                <div class="center-modal-box" style="width: 90%; max-width: 400px;" @click.stop>
+                    <h3 style="text-align: center; font-size: 16px;">编辑消息</h3>
+                    <textarea v-model="tempEditContent" class="glass-textarea" style="height: 150px;"></textarea>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button class="api-delete-btn" style="margin:0; flex:1; padding:12px;" @click="showEditModal = false">取消</button>
+                        <button class="api-save-btn" style="margin:0; flex:1; padding:12px;" @click="saveEditMessage">保存</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="os-modal" v-if="showOs" @click.stop>
+                <div class="os-header">
+                    <span><i class="ri-brain-line"></i> 心声记录</span>
+                    <i class="ri-close-line" @click="showOs = false" style="cursor:pointer"></i>
+                </div>
+                <div class="os-content" ref="osScrollRef">
+                    <div v-for="(msg, idx) in osHistory" :key="idx" style="margin-bottom: 15px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 10px;">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 4px;">{{ msg.role === 'user' ? '我' : sessionData.name }}</div>
+                        <div v-if="msg.os" style="color: #333; font-weight: 500; white-space: pre-wrap;">{{ msg.os }}</div>
+                        <div v-else style="color: #ccc; font-style: italic;">(无心声)</div>
+                    </div>
+                    <div v-if="osHistory.length === 0" class="os-placeholder">暂无心声记录</div>
+                </div>
+            </div>
+
             <div class="context-menu-overlay" v-if="contextMenu.visible" @click="closePopups">
                 <div class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }" @click.stop>
                     <div class="menu-item" @click="menuAction('copy')"><i class="ri-file-copy-line"></i> 复制</div>
                     <div class="menu-item" @click="menuAction('quote')"><i class="ri-chat-quote-line"></i> 引用</div>
                     <div class="menu-item" @click="menuAction('edit')"><i class="ri-edit-line"></i> 编辑</div>
+                    <div class="menu-item" v-if="contextMenu.role === 'user'" @click="menuAction('recall')"><i class="ri-arrow-go-back-line"></i> 撤回</div>
                     <div class="menu-item" @click="menuAction('multi')"><i class="ri-checkbox-multiple-line"></i> 多选</div>
                     <div class="menu-item danger" @click="menuAction('delete')"><i class="ri-delete-bin-line"></i> 删除</div>
                 </div>
@@ -97,22 +116,35 @@ export default {
         const isSettingOpen = ref(false);
         const statusText = ref('在线');
         const isGenerating = ref(false);
-        
-        // 样式：只保留动态背景图，布局属性已移至 CSS
-        const containerStyle = ref({ 
-            background: '#f2f4f6', 
-            backgroundSize: 'cover', 
-            backgroundPosition: 'center'
-        });
+        const containerStyle = ref({ background: '#f2f4f6', backgroundSize: 'cover', backgroundPosition: 'center' });
         
         const showOs = ref(false);
-        const currentOs = ref('');
-        const contextMenu = reactive({ visible: false, x: 0, y: 0, index: -1 });
+        const contextMenu = reactive({ visible: false, x: 0, y: 0, index: -1, role: '' });
         const isMultiSelect = ref(false);
         const selectedIndices = ref([]);
         const inputBarRef = ref(null);
+        const showStatusModal = ref(false);
+        const tempStatusValue = ref('');
+        const showEditModal = ref(false);
+        const tempEditContent = ref('');
+        const editIndex = ref(-1);
+        
+        const scrollRef = ref(null);
+        const osScrollRef = ref(null);
 
-        const loadData = () => {
+        const osHistory = computed(() => {
+            return sessionData.value.messages.filter(m => m.role === 'assistant' || m.os);
+        });
+
+        const scrollToBottom = async () => {
+            await nextTick();
+            if (scrollRef.value) scrollRef.value.scrollTop = scrollRef.value.scrollHeight;
+            if (osScrollRef.value) osScrollRef.value.scrollTop = osScrollRef.value.scrollHeight;
+        };
+
+        watch(() => sessionData.value.messages, scrollToBottom, { deep: true });
+
+        const loadData = async () => {
             const allSessions = JSON.parse(localStorage.getItem('ai_phone_sessions') || '[]');
             const found = allSessions.find(s => s.id === props.sessionId);
             if (found) {
@@ -121,6 +153,7 @@ export default {
                 sessionData.value = found;
                 if (found.settings.background) containerStyle.value.backgroundImage = `url(${found.settings.background})`;
                 statusText.value = found.status || '在线'; 
+                await scrollToBottom();
             }
         };
         onMounted(loadData);
@@ -143,25 +176,58 @@ export default {
 
         const handleStatusUpdate = (newStatus) => { statusText.value = newStatus; saveToLocal(); };
         const handleClearHistory = () => { sessionData.value.messages = []; sessionData.value.lastMessage = ''; saveToLocal(); isSettingOpen.value = false; };
-        const toggleOs = () => { showOs.value = !showOs.value; };
+        const toggleOs = () => { showOs.value = !showOs.value; setTimeout(scrollToBottom, 100); };
         const closePopups = () => { contextMenu.visible = false; };
         
+        const openStatusModal = () => { tempStatusValue.value = statusText.value; showStatusModal.value = true; };
+        const saveStatus = () => { statusText.value = tempStatusValue.value; saveToLocal(); showStatusModal.value = false; };
+
         const openContextMenu = ({ x, y, index }) => {
             const menuWidth = 140; const menuHeight = 200;
             if (x + menuWidth > window.innerWidth) x -= menuWidth;
             if (y + menuHeight > window.innerHeight) y -= menuHeight;
-            contextMenu.x = x; contextMenu.y = y; contextMenu.index = index; contextMenu.visible = true;
+            contextMenu.x = x; contextMenu.y = y; contextMenu.index = index; 
+            contextMenu.role = sessionData.value.messages[index].role;
+            contextMenu.visible = true;
         };
 
         const menuAction = (action) => {
             const idx = contextMenu.index;
             const msg = sessionData.value.messages[idx];
             contextMenu.visible = false;
-            if (action === 'copy') navigator.clipboard.writeText(msg.content);
-            else if (action === 'delete') { sessionData.value.messages.splice(idx, 1); saveToLocal(); }
-            else if (action === 'quote') { if (inputBarRef.value) inputBarRef.value.text = `> ${msg.content}\n`; }
-            else if (action === 'edit') { const newText = prompt("编辑消息:", msg.content); if (newText !== null) { sessionData.value.messages[idx].content = newText; saveToLocal(); } }
-            else if (action === 'multi') { isMultiSelect.value = true; selectedIndices.value = [idx]; }
+            
+            if (action === 'copy') {
+                navigator.clipboard.writeText(msg.content);
+            } else if (action === 'delete') {
+                sessionData.value.messages.splice(idx, 1);
+                saveToLocal();
+            } else if (action === 'quote') {
+                if (inputBarRef.value) {
+                    inputBarRef.value.setQuote({
+                        name: msg.role === 'user' ? '我' : sessionData.value.name,
+                        content: msg.content
+                    });
+                }
+            } else if (action === 'recall') {
+                if (inputBarRef.value) inputBarRef.value.text = msg.content;
+                sessionData.value.messages.splice(idx, 1);
+                saveToLocal();
+            } else if (action === 'edit') {
+                tempEditContent.value = msg.content;
+                editIndex.value = idx;
+                showEditModal.value = true;
+            } else if (action === 'multi') {
+                isMultiSelect.value = true;
+                selectedIndices.value = [idx];
+            }
+        };
+
+        const saveEditMessage = () => {
+            if (editIndex.value > -1 && tempEditContent.value.trim()) {
+                sessionData.value.messages[editIndex.value].content = tempEditContent.value;
+                saveToLocal();
+            }
+            showEditModal.value = false;
         };
 
         const toggleSelect = (index) => {
@@ -182,54 +248,84 @@ export default {
             const activeWbIds = sessionData.value.settings.activeWorldbooks || [];
             const activeBooks = allWorldbooks.filter(wb => wb.type === 'book' && activeWbIds.includes(wb.id));
             if (activeBooks.length > 0) {
-                prompt += "【世界观】\n";
+                prompt += "【世界观与法则】\n";
                 activeBooks.forEach(wb => { prompt += `- ${wb.title}: ${wb.content}\n`; });
+                prompt += "\n";
             }
-            if (sessionData.value.settings.systemPrompt) prompt += `【你的设定】\n${sessionData.value.settings.systemPrompt}\n\n`;
-            if (sessionData.value.settings.userPersona) prompt += `【用户设定】\n${sessionData.value.settings.userPersona}\n\n`;
+            if (sessionData.value.settings.systemPrompt) prompt += `【你的角色设定】\n${sessionData.value.settings.systemPrompt}\n\n`;
+            if (sessionData.value.settings.userPersona) prompt += `【用户(User)设定】\n${sessionData.value.settings.userPersona}\n\n`;
+            if (sessionData.value.settings.longTermMemory) prompt += `【长期记忆 (过往经历与事实)】\n${sessionData.value.settings.longTermMemory}\n\n`;
+            if (sessionData.value.settings.shortTermMemory) prompt += `【短期记忆 (最近发生的事)】\n${sessionData.value.settings.shortTermMemory}\n\n`;
             prompt += "\n【重要指令】\n请在回复内容的最前面，用【】中括号包裹你的心理活动或潜台词。例如：【他看起来很生气，我得小心点】好的，我明白了。";
             return prompt;
         };
 
-        const handleSendOnly = (text) => {
-            if (!text) return;
-            sessionData.value.messages.push({ role: 'user', content: text });
-            sessionData.value.lastMessage = text;
+        // 核心修改：接收 payload 对象 { text, quote }
+        const handleSendOnly = (payload) => {
+            // 兼容旧代码：如果 payload 是字符串，转为对象
+            const content = (typeof payload === 'string') ? payload : payload.text;
+            const quote = (typeof payload === 'object') ? payload.quote : null;
+
+            if (!content) return;
+            
+            sessionData.value.messages.push({ 
+                role: 'user', 
+                content: content,
+                quote: quote // 存入引用
+            });
+            sessionData.value.lastMessage = content;
             sessionData.value.lastTime = Date.now();
             saveToLocal();
         };
 
-        // --- 核心修复：回溯重开逻辑 ---
+        const runBackgroundSummary = async (apiKey, baseUrl) => {
+            const threshold = sessionData.value.settings.summaryThreshold;
+            if (!threshold || threshold <= 0) return;
+            const msgs = sessionData.value.messages;
+            if (msgs.length > 0 && msgs.length % threshold === 0) {
+                try {
+                    const recentContext = msgs.slice(-50).map(m => `${m.role}: ${m.content}`).join('\n');
+                    const prompt = sessionData.value.settings.summaryPrompt || '请简要总结上述对话。';
+                    const response = await fetch(`${baseUrl}/chat/completions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                        body: JSON.stringify({
+                            model: 'gpt-3.5-turbo',
+                            messages: [
+                                { role: 'system', content: 'You are a helpful assistant.' },
+                                { role: 'user', content: `${prompt}\n\n【对话内容】\n${recentContext}` }
+                            ],
+                            stream: false
+                        })
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        sessionData.value.settings.shortTermMemory = data.choices[0].message.content;
+                        saveToLocal();
+                        console.log("自动总结完成");
+                    }
+                } catch (e) {
+                    console.error("自动总结失败", e);
+                }
+            }
+        };
+
         const handleRegenerate = async () => {
             if (isGenerating.value) return;
             const msgs = sessionData.value.messages;
             if (msgs.length === 0) return;
-
-            // 1. 倒序查找最后一条 User 消息
             let lastUserIndex = -1;
-            for (let i = msgs.length - 1; i >= 0; i--) {
-                if (msgs[i].role === 'user') {
-                    lastUserIndex = i;
-                    break;
-                }
-            }
-
-            if (lastUserIndex === -1) {
-                await handleGenerate(null);
-            } else {
-                // 2. 斩断未来
-                if (lastUserIndex < msgs.length - 1) {
-                    msgs.splice(lastUserIndex + 1); 
-                }
-                saveToLocal();
-                // 3. 重新推演
-                await handleGenerate(null); 
-            }
+            for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].role === 'user') { lastUserIndex = i; break; } }
+            if (lastUserIndex === -1) { await handleGenerate(null); } 
+            else { if (lastUserIndex < msgs.length - 1) msgs.splice(lastUserIndex + 1); saveToLocal(); await handleGenerate(null); }
         };
 
-        const handleGenerate = async (text) => {
+        // 核心修改：接收 payload 对象
+        const handleGenerate = async (payload) => {
             if (isGenerating.value) return;
-            if (text) handleSendOnly(text);
+            
+            // 如果有 payload，先发送用户消息
+            if (payload) handleSendOnly(payload);
 
             const profiles = JSON.parse(localStorage.getItem('ai_phone_profiles') || '[]');
             const activeId = localStorage.getItem('ai_phone_active_id');
@@ -238,14 +334,23 @@ export default {
             if (!config || !config.apiKey) { alert("未配置 API Key。"); return; }
 
             isGenerating.value = true;
-            currentOs.value = '';
             const originalStatus = statusText.value;
             statusText.value = '对方正在输入...';
             
-            const msgIndex = sessionData.value.messages.push({ role: 'assistant', content: '' }) - 1;
+            const msgIndex = sessionData.value.messages.push({ role: 'assistant', content: '', os: '' }) - 1;
+            scrollToBottom(); 
 
             try {
-                const history = sessionData.value.messages.slice(-20, -1).map(m => ({ role: m.role, content: m.content }));
+                // 构建历史记录时，将引用内容拼接到 content 前面，让 AI 看到
+                // 但不修改原始 messages 数据，只在发送给 API 时拼接
+                const history = sessionData.value.messages.slice(-20, -1).map(m => {
+                    let content = m.content;
+                    if (m.quote) {
+                        content = `「回复 ${m.quote.name}: ${m.quote.content}」\n${content}`;
+                    }
+                    return { role: m.role, content: content };
+                });
+
                 const messagesPayload = [{ role: 'system', content: buildSystemPrompt() }, ...history];
                 let baseUrl = config.baseUrl.replace(/\/$/, '');
                 const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -277,15 +382,18 @@ export default {
                                 fullText += content;
                                 const match = fullText.match(/【(.*?)】/s);
                                 if (match) {
-                                    currentOs.value = match[1];
+                                    sessionData.value.messages[msgIndex].os = match[1];
                                     sessionData.value.messages[msgIndex].content = fullText.replace(/【.*?】/s, '').trimStart();
                                 } else {
                                     if (fullText.includes('【')) {
                                          sessionData.value.messages[msgIndex].content = fullText.split('【')[0];
-                                         currentOs.value = fullText.split('【')[1] || '...';
+                                         sessionData.value.messages[msgIndex].os = fullText.split('【')[1] || '...';
                                     } else {
                                         sessionData.value.messages[msgIndex].content = fullText;
                                     }
+                                }
+                                if(scrollRef.value && scrollRef.value.scrollHeight - scrollRef.value.scrollTop < 600) {
+                                    scrollToBottom();
                                 }
                             } catch (e) {}
                         }
@@ -293,13 +401,15 @@ export default {
                 }
                 const finalMatch = fullText.match(/【(.*?)】/s);
                 if (finalMatch) {
-                    currentOs.value = finalMatch[1];
+                    sessionData.value.messages[msgIndex].os = finalMatch[1];
                     sessionData.value.messages[msgIndex].content = fullText.replace(/【.*?】/s, '').trim();
                 } else {
                     sessionData.value.messages[msgIndex].content = fullText;
                 }
                 sessionData.value.lastMessage = sessionData.value.messages[msgIndex].content;
                 saveToLocal();
+                scrollToBottom();
+                runBackgroundSummary(config.apiKey, baseUrl);
             } catch (e) {
                 sessionData.value.messages[msgIndex].content = `[连接失败] ${e.message}`;
             } finally {
@@ -311,9 +421,12 @@ export default {
         return { 
             sessionData, isSettingOpen, statusText, isGenerating, 
             handleSendOnly, handleGenerate, handleRegenerate, updateSessionData, containerStyle, 
-            handleStatusUpdate, handleClearHistory, showOs, currentOs, toggleOs,
+            handleStatusUpdate, handleClearHistory, showOs, toggleOs,
             contextMenu, openContextMenu, closePopups, menuAction,
-            isMultiSelect, selectedIndices, toggleSelect, deleteSelected, inputBarRef
+            isMultiSelect, selectedIndices, toggleSelect, deleteSelected, inputBarRef,
+            showStatusModal, tempStatusValue, openStatusModal, saveStatus,
+            showEditModal, tempEditContent, saveEditMessage,
+            scrollRef, osScrollRef, osHistory 
         };
     }
 };
